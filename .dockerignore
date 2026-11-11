@@ -1,0 +1,17 @@
+# Rebuilt inside the image
+node_modules
+dist
+
+# Secrets are passed at run time, never baked into the image
+.env
+.env.*
+
+# Not needed to build
+.git
+.gitignore
+.dockerignore
+Dockerfile
+*.md
+npm-debug.log*
+.vscode
+.idea
