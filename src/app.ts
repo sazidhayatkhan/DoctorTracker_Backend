@@ -3,6 +3,8 @@ import express, { Application } from "express";
 import cors from "cors";
 import errorMiddleware from "./middlewares/error.middleware";
 import AppError from "./utils/AppError";
+import authRoutes from "./modules/auth/auth.routes";
+import authMiddleware from "./middlewares/auth.middleware";
 
 const app: Application = express();
 
@@ -30,7 +32,10 @@ app.get("/api/test-error", (req, res, next) => {
   next(new AppError("Something went wrong!", 400));
 });
 
+app.use("/api/auth", authRoutes);
 
+// app.use("/api/doctors", authMiddleware, doctorRoutes);
+// app.use("/api/patients", authMiddleware, patientRoutes);
 app.use(errorMiddleware);
 
 export default app;
