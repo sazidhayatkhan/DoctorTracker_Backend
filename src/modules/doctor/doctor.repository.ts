@@ -3,6 +3,7 @@ import { QueryFilter } from "mongoose";
 
 import Doctor, { IDoctor } from "./doctor.model";
 import { ListDoctorsQuery } from "./doctor.dto";
+import hospitalRepository from "../hospital/hospital.repository";
 import {
   PaginationOptions,
   buildPaginatedResult,
@@ -12,17 +13,26 @@ import {
 
 type DoctorFilters = Omit<ListDoctorsQuery, "page" | "limit">;
 
-const buildFilter = ({
+/** Internal fields never sent to clients */
+const PUBLIC_PROJECTION = "-isDeleted -__v";
+
+/** Replace hospital/specialization IDs with {_id, name} */
+const POPULATE = [
+  { path: "hospital", select: "_id name" },
+  { path: "specialization", select: "_id name" },
+];
+
+const buildFilter = async ({
   q,
-  specialization,
+  specializationId,
+  hospitalId,
   from,
   to,
-}: DoctorFilters): QueryFilter<IDoctor> => {
+}: DoctorFilters): Promise<QueryFilter<IDoctor>> => {
   const filter: QueryFilter<IDoctor> = { isDeleted: false };
 
-  if (specialization) {
-    filter.specialization = specialization;
-  }
+  if (specializationId) filter.specialization = specializationId;
+  if (hospitalId) filter.hospital = hospitalId;
 
   if (from || to) {
     const createdAt: { $gte?: Date; $lt?: Date } = {};
@@ -39,7 +49,13 @@ const buildFilter = ({
   const query = q?.trim();
   if (query && query.length >= 2) {
     const regex = { $regex: escapeRegex(query), $options: "i" };
-    filter.$or = [{ name: regex }, { email: regex }, { hospital: regex }];
+    const or: QueryFilter<IDoctor>[] = [{ name: regex }, { email: regex }];
+
+    // Hospital is a reference now: resolve matching hospitals to IDs first.
+    const hospitalIds = await hospitalRepository.findIdsByName(query);
+    if (hospitalIds.length > 0) or.push({ hospital: { $in: hospitalIds } });
+
+    filter.$or = or;
   }
 
   return filter;
@@ -52,15 +68,16 @@ class DoctorRepository {
 
   /** Active doctors, newest first, filtered and paginated */
   async findPaginated(filters: DoctorFilters, pagination: PaginationOptions) {
-    const filter = buildFilter(filters);
+    const filter = await buildFilter(filters);
 
     // Page and total are fetched in parallel; lean() skips document hydration.
     const [items, total] = await Promise.all([
       Doctor.find(filter)
-        .select("-isDeleted -__v")
+        .select(PUBLIC_PROJECTION)
         .sort({ createdAt: -1, _id: -1 })
         .skip(getSkip(pagination))
         .limit(pagination.limit)
+        .populate(POPULATE)
         .lean(),
       Doctor.countDocuments(filter),
     ]);
@@ -69,16 +86,30 @@ class DoctorRepository {
   }
 
   async findById(id: string): Promise<IDoctor | null> {
-    return Doctor.findOne({
-      _id: id,
-      isDeleted: false,
-    });
+    return Doctor.findOne({ _id: id, isDeleted: false })
+      .select(PUBLIC_PROJECTION)
+      .populate(POPULATE);
+  }
+
+  async existsById(id: string): Promise<boolean> {
+    return (await Doctor.exists({ _id: id, isDeleted: false })) !== null;
   }
 
   async findByEmail(email: string): Promise<IDoctor | null> {
     return Doctor.findOne({
       email,
       isDeleted: false,
+    });
+  }
+
+  async countByHospital(hospitalId: string): Promise<number> {
+    return Doctor.countDocuments({ isDeleted: false, hospital: hospitalId });
+  }
+
+  async countBySpecialization(specializationId: string): Promise<number> {
+    return Doctor.countDocuments({
+      isDeleted: false,
+      specialization: specializationId,
     });
   }
 
@@ -90,7 +121,9 @@ class DoctorRepository {
       { _id: id, isDeleted: false },
       data,
       { new: true, runValidators: true }
-    );
+    )
+      .select(PUBLIC_PROJECTION)
+      .populate(POPULATE);
   }
 
   async softDelete(id: string): Promise<IDoctor | null> {
@@ -98,7 +131,7 @@ class DoctorRepository {
       { _id: id, isDeleted: false },
       { isDeleted: true, isActive: false },
       { new: true }
-    );
+    ).select(PUBLIC_PROJECTION);
   }
 }
 

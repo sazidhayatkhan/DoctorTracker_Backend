@@ -1,12 +1,12 @@
 
-import { Schema, model, Document } from "mongoose";
+import { Schema, model, Document, Types } from "mongoose";
 
 export interface IDoctor extends Document {
   name: string;
   email: string;
   phone: string;
-  hospital: string;
-  specialization: string;
+  hospital: Types.ObjectId;
+  specialization: Types.ObjectId;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: Date;
@@ -36,15 +36,15 @@ const doctorSchema = new Schema<IDoctor>(
     },
 
     hospital: {
-      type: String,
+      type: Schema.Types.ObjectId,
+      ref: "Hospital",
       required: true,
-      trim: true,
     },
 
     specialization: {
-      type: String,
+      type: Schema.Types.ObjectId,
+      ref: "Specialization",
       required: true,
-      trim: true,
     },
 
     isActive: {
@@ -64,8 +64,12 @@ const doctorSchema = new Schema<IDoctor>(
 // Default listing (and date-range filter): active doctors, newest first.
 doctorSchema.index({ isDeleted: 1, createdAt: -1, _id: -1 });
 
-// Listing filtered by specialization, still newest first.
+// Listing filtered by specialization, still newest first
+// (also serves the "is this specialization in use?" count).
 doctorSchema.index({ isDeleted: 1, specialization: 1, createdAt: -1, _id: -1 });
+
+// Listing filtered by hospital, and the "is this hospital in use?" count.
+doctorSchema.index({ isDeleted: 1, hospital: 1, createdAt: -1, _id: -1 });
 
 const Doctor = model<IDoctor>("Doctor", doctorSchema);
 
