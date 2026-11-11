@@ -10,6 +10,7 @@ import {
   escapeRegex,
   getSkip,
 } from "../../utils/pagination";
+import { buildCreatedAtRange } from "../../utils/dateRange";
 
 type DoctorFilters = Omit<ListDoctorsQuery, "page" | "limit">;
 
@@ -34,17 +35,8 @@ const buildFilter = async ({
   if (specializationId) filter.specialization = specializationId;
   if (hospitalId) filter.hospital = hospitalId;
 
-  if (from || to) {
-    const createdAt: { $gte?: Date; $lt?: Date } = {};
-    if (from) createdAt.$gte = new Date(`${from}T00:00:00.000Z`);
-    if (to) {
-      // `to` is inclusive: everything before the start of the next day.
-      const end = new Date(`${to}T00:00:00.000Z`);
-      end.setUTCDate(end.getUTCDate() + 1);
-      createdAt.$lt = end;
-    }
-    filter.createdAt = createdAt;
-  }
+  const createdAt = buildCreatedAtRange(from, to);
+  if (createdAt) filter.createdAt = createdAt;
 
   const query = q?.trim();
   if (query && query.length >= 2) {

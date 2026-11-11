@@ -3,6 +3,11 @@ import { z } from "zod";
 import { Types } from "mongoose";
 
 import { paginationQuerySchema } from "../../utils/pagination";
+import {
+  dateRangeError,
+  dateRangeQueryShape,
+  isValidDateRange,
+} from "../../utils/dateRange";
 
 const objectId = (label: string) =>
   z
@@ -20,11 +25,6 @@ export const createDoctorSchema = z.object({
 
 export const updateDoctorSchema = createDoctorSchema.partial();
 
-const isoDate = z
-  .string()
-  .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in yyyy-mm-dd format");
-
 /** `GET /doctors?q=&specializationId=&hospitalId=&from=&to=&page=&limit=` */
 export const listDoctorsQuerySchema = paginationQuerySchema
   .extend({
@@ -32,15 +32,9 @@ export const listDoctorsQuerySchema = paginationQuerySchema
     q: z.string().trim().max(100).optional(),
     specializationId: objectId("specialization").optional(),
     hospitalId: objectId("hospital").optional(),
-    /** Registered on or after this date (yyyy-mm-dd) */
-    from: isoDate.optional(),
-    /** Registered on or before this date (yyyy-mm-dd, inclusive) */
-    to: isoDate.optional(),
+    ...dateRangeQueryShape,
   })
-  .refine((v) => !v.from || !v.to || v.from <= v.to, {
-    message: "'from' must be on or before 'to'",
-    path: ["from"],
-  });
+  .refine(isValidDateRange, dateRangeError);
 
 export type ListDoctorsQuery = z.infer<typeof listDoctorsQuerySchema>;
 
