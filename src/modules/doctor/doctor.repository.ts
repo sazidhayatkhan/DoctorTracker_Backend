@@ -1,5 +1,5 @@
 
-import { QueryFilter } from "mongoose";
+import { QueryFilter, Types } from "mongoose";
 
 import Doctor, { IDoctor } from "./doctor.model";
 import { ListDoctorsQuery } from "./doctor.dto";
@@ -92,6 +92,30 @@ class DoctorRepository {
       email,
       isDeleted: false,
     });
+  }
+
+  /**
+   * Active doctors per hospital/specialization for the given IDs, in one
+   * aggregation (served by the { isDeleted, hospital|specialization } indexes).
+   * IDs with no doctors are absent from the map.
+   */
+  async countByRef(
+    field: "hospital" | "specialization",
+    ids: (string | Types.ObjectId)[]
+  ): Promise<Map<string, number>> {
+    if (ids.length === 0) return new Map();
+
+    const rows = await Doctor.aggregate<{ _id: Types.ObjectId; count: number }>([
+      {
+        $match: {
+          isDeleted: false,
+          [field]: { $in: ids.map((id) => new Types.ObjectId(id)) },
+        },
+      },
+      { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+    ]);
+
+    return new Map(rows.map((r) => [r._id.toString(), r.count]));
   }
 
   async countByHospital(hospitalId: string): Promise<number> {
