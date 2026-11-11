@@ -12,6 +12,21 @@ import assignmentRepository from "../assignment/assignment.repository";
 import hospitalRepository from "../hospital/hospital.repository";
 import specializationRepository from "../specialization/specialization.repository";
 import AppError from "../../utils/AppError";
+import { isDuplicateKeyError } from "../../utils/naming";
+
+const DUPLICATE_EMAIL_MESSAGE = "A doctor with this email already exists";
+
+/** Turns a race on the unique email index into a 409 instead of a 500 */
+const withUniqueEmail = async <T>(write: () => Promise<T>): Promise<T> => {
+  try {
+    return await write();
+  } catch (err) {
+    if (isDuplicateKeyError(err, "email")) {
+      throw new AppError(DUPLICATE_EMAIL_MESSAGE, 409);
+    }
+    throw err;
+  }
+};
 
 class DoctorService {
   /**
@@ -51,19 +66,34 @@ class DoctorService {
     const existingDoctor = await doctorRepository.findByEmail(data.email);
 
     if (existingDoctor) {
-      throw new AppError("A doctor with this email already exists", 409);
+      throw new AppError(DUPLICATE_EMAIL_MESSAGE, 409);
     }
 
-    const doctor = await doctorRepository.create(
-      await this.resolveReferences(data)
-    );
+    const resolved = await this.resolveReferences(data);
+    const doctor = await withUniqueEmail(() => doctorRepository.create(resolved));
 
     // Return the populated shape used by the read endpoints.
     return doctorRepository.findById(doctor._id.toString());
   }
 
+  /** A page of doctors, each with its number of assigned patients */
   async getAllDoctors({ page, limit, ...filters }: ListDoctorsQuery) {
-    return doctorRepository.findPaginated(filters, { page, limit });
+    const result = await doctorRepository.findPaginated(filters, {
+      page,
+      limit,
+    });
+
+    const counts = await assignmentRepository.countByDoctors(
+      result.items.map((doctor) => doctor._id)
+    );
+
+    return {
+      ...result,
+      items: result.items.map((doctor) => ({
+        ...doctor,
+        patientCount: counts.get(doctor._id.toString()) ?? 0,
+      })),
+    };
   }
 
   async getDoctorById(id: string) {
@@ -87,11 +117,12 @@ class DoctorService {
       const existingDoctor = await doctorRepository.findByEmail(data.email);
 
       if (existingDoctor) {
-        throw new AppError("A doctor with this email already exists", 409);
+        throw new AppError(DUPLICATE_EMAIL_MESSAGE, 409);
       }
     }
 
-    return doctorRepository.updateById(id, await this.resolveReferences(data));
+    const resolved = await this.resolveReferences(data);
+    return withUniqueEmail(() => doctorRepository.updateById(id, resolved));
   }
 
   async deleteDoctor(id: string) {
