@@ -61,6 +61,12 @@ const doctorSchema = new Schema<IDoctor>(
   }
 );
 
+// Default listing (and date-range filter): active doctors, newest first.
+doctorSchema.index({ isDeleted: 1, createdAt: -1, _id: -1 });
+
+// Listing filtered by specialization, still newest first.
+doctorSchema.index({ isDeleted: 1, specialization: 1, createdAt: -1, _id: -1 });
+
 const Doctor = model<IDoctor>("Doctor", doctorSchema);
 
 export default Doctor;

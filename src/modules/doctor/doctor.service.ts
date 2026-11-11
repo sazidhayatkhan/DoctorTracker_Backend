@@ -1,6 +1,10 @@
 
 import doctorRepository from "./doctor.repository";
-import { CreateDoctorDTO, UpdateDoctorDTO } from "./doctor.dto";
+import {
+  CreateDoctorDTO,
+  ListDoctorsQuery,
+  UpdateDoctorDTO,
+} from "./doctor.dto";
 import assignmentRepository from "../assignment/assignment.repository";
 import AppError from "../../utils/AppError";
 
@@ -15,8 +19,8 @@ class DoctorService {
     return doctorRepository.create(data);
   }
 
-  async getAllDoctors() {
-    return doctorRepository.findAll();
+  async getAllDoctors({ page, limit, ...filters }: ListDoctorsQuery) {
+    return doctorRepository.findPaginated(filters, { page, limit });
   }
 
   async getDoctorById(id: string) {

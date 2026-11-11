@@ -3,7 +3,11 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 
 import doctorService from "./doctor.service";
-import { createDoctorSchema, updateDoctorSchema } from "./doctor.dto";
+import {
+  createDoctorSchema,
+  listDoctorsQuerySchema,
+  updateDoctorSchema,
+} from "./doctor.dto";
 import AppError from "../../utils/AppError";
 import ApiResponse from "../../utils/ApiResponse";
 
@@ -21,7 +25,8 @@ class DoctorController {
   }
 
   async getAllDoctors(req: Request, res: Response) {
-    const doctors = await doctorService.getAllDoctors();
+    const query = listDoctorsQuerySchema.parse(req.query);
+    const doctors = await doctorService.getAllDoctors(query);
 
     return ApiResponse.success(
       res,
